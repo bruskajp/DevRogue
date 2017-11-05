@@ -38,6 +38,8 @@ static struct file_operations dev_ops = {
 
 int init_module() {
 	int status;
+	
+	// Draw basic fullscreen room
 	int i = 22;
 	int o = 78;
 	while(i-- > 1) {
@@ -57,6 +59,8 @@ int init_module() {
 	}
 	gamebuffer[80+0*81] = '\n';
 	gamebuffer[80+23*81] = '\n';
+	gamebuffer[sizeof(gamebuffer)-1] = '\0';
+
 	if((status = alloc_chrdev_region(&devnode, 0, 1, rogue)) < 0) {
 		printk(KERN_ALERT "Can't rogue: %d\n", status);
 		return status;
