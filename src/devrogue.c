@@ -101,10 +101,19 @@ static int rogue_release(struct inode *ino, struct file *fil) {
 	return 0;
 }
 
+static void rogue_update_state(char action) {
+	
+}
 
 static ssize_t rogue_read(struct file *fil, char *buf, size_t len, loff_t *off) {
 	register int amt = sizeof(gamebuffer);
 	register int x = 0;
+	
+	while(x < count_act) {
+		rogue_update_state(actionqueue[x++]);
+	}
+	count_act = 0;
+	x = 0;
 	if(len < sizeof(gamebuffer)) {
 		// TODO when len is less than the game screen size
 	} else {
