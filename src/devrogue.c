@@ -22,8 +22,9 @@ static ssize_t rogue_read(struct file *, char *, size_t, loff_t *);
 static ssize_t rogue_write(struct file *, const char *, size_t, loff_t *);
 
 static int count_act = 0;
+static char shouldDisplay = 1;
 static char actionqueue[] = "blahblahblah";
-static char gamebuffer[(80+1)*24];
+static char gamebuffer[(80+1)*24+1];
 
 #define len_queue ((sizeof(actionqueue)/sizeof(actionqueue[0])) - 1)
 
@@ -37,6 +38,25 @@ static struct file_operations dev_ops = {
 
 int init_module() {
 	int status;
+	int i = 22;
+	int o = 78;
+	while(i-- > 1) {
+		o = 78;
+		gamebuffer[0+81*i] = '*';
+		while(o-- > 1) {
+			gamebuffer[o+81*i] = '.';
+		}
+		gamebuffer[79+81*i] = '*';
+		gamebuffer[80+81*i] = '\n';
+	}
+	o = 79;
+	while(o-- > 0)
+	{
+		gamebuffer[o+0*81] = '*';
+		gamebuffer[o+23*81] = '*';
+	}
+	gamebuffer[80+0*81] = '\n';
+	gamebuffer[80+23*81] = '\n';
 	if((status = alloc_chrdev_region(&devnode, 0, 1, rogue)) < 0) {
 		printk(KERN_ALERT "Can't rogue: %d\n", status);
 		return status;
@@ -79,22 +99,30 @@ static int rogue_release(struct inode *ino, struct file *fil) {
 
 
 static ssize_t rogue_read(struct file *fil, char *buf, size_t len, loff_t *off) {
-	register int amt = count_act;
-	register int count_ret = count_act;
+	register int amt = sizeof(gamebuffer);
 	register int x = 0;
-	while(amt-- > 0) {
-		put_user(actionqueue[x++], buf++);
+	if(len < sizeof(gamebuffer)) {
+		// TODO when len is less than the game screen size
+	} else {
+		while(amt-- > 0) {
+			put_user(gamebuffer[x++], buf++);
+		}
 	}
-	count_act = 0;
-	return count_ret;
+	if(shouldDisplay) {
+		shouldDisplay = 0;
+		return sizeof(gamebuffer);
+	} else { 
+		return 0;
+	}
 }
 
 static ssize_t rogue_write(struct file *fil, const char *buf, size_t len, loff_t *off) {
 	/* cool. */
 	register int amt = len;
 	while(amt-- > 0) {
-		if(count < len_queue) {
-			get_user(actionqueue[count++], buf++);
+		if(count_act < len_queue) {
+			shouldDisplay = 1;
+			get_user(actionqueue[count_act++], buf++);
 		}
 	}
 	return len;
