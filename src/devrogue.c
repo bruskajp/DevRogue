@@ -26,6 +26,8 @@ static char shouldDisplay = 1;
 static char actionqueue[] = "blahblahblah";
 static char gamebuffer[(80+1)*24+1];
 
+
+
 #define len_queue ((sizeof(actionqueue)/sizeof(actionqueue[0])) - 1)
 
 static struct file_operations dev_ops = {
@@ -40,22 +42,22 @@ int init_module() {
 	int status;
 	
 	// Draw basic fullscreen room
-	int i = 22;
-	int o = 78;
-	while(i-- > 1) {
-		o = 78;
-		gamebuffer[0+81*i] = '*';
-		while(o-- > 1) {
-			gamebuffer[o+81*i] = '.';
+	int y = 22;
+	int x = 78;
+	while(y-- > 1) {
+		x = 78;
+		gamebuffer[0+81*y] = '*';
+		while(x-- > 1) {
+			gamebuffer[x+81*y] = '.';
 		}
-		gamebuffer[79+81*i] = '*';
-		gamebuffer[80+81*i] = '\n';
+		gamebuffer[79+81*y] = '*';
+		gamebuffer[80+81*y] = '\n';
 	}
-	o = 79;
-	while(o-- > 0)
+	x = 79;
+	while(x-- > 0)
 	{
-		gamebuffer[o+0*81] = '*';
-		gamebuffer[o+23*81] = '*';
+		gamebuffer[x+0*81] = '*';
+		gamebuffer[x+23*81] = '*';
 	}
 	gamebuffer[80+0*81] = '\n';
 	gamebuffer[80+23*81] = '\n';
