@@ -21,9 +21,10 @@ static int rogue_release(struct inode *, struct file *);
 static ssize_t rogue_read(struct file *, char *, size_t, loff_t *);
 static ssize_t rogue_write(struct file *, const char *, size_t, loff_t *);
 
-static int count = 0;
-static int cant = 0;
+static int count_act = 0;
 static char actionqueue[] = "blahblahblah";
+static char gamebuffer[(80+1)*24];
+
 #define len_queue ((sizeof(actionqueue)/sizeof(actionqueue[0])) - 1)
 
 static struct file_operations dev_ops = {
@@ -78,14 +79,14 @@ static int rogue_release(struct inode *ino, struct file *fil) {
 
 
 static ssize_t rogue_read(struct file *fil, char *buf, size_t len, loff_t *off) {
-	register int amt = count;
+	register int amt = count_act;
+	register int count_ret = count_act;
 	register int x = 0;
 	while(amt-- > 0) {
 		put_user(actionqueue[x++], buf++);
 	}
-	cant = count;
-	count = 0;
-	return cant;
+	count_act = 0;
+	return count_ret;
 }
 
 static ssize_t rogue_write(struct file *fil, const char *buf, size_t len, loff_t *off) {
