@@ -96,9 +96,11 @@ static void rogue_draw_enemies() {
 	}
 }
 
-int init_module() {
-	int status;
-	
+static void genLevel( void ) {
+	unsigned char rand;
+        int i, j, num_doors, num_doors_available, box_size_x, box_size_y, box_pos_x, box_pos_y, player_x, player_y;
+        int doors[6];	
+
 	// Draw basic fullscreen room
 	int y = (PLAYFIELD_HEIGHT-3);
 	int x = (PLAYFIELD_WIDTH-3);
@@ -106,7 +108,7 @@ int init_module() {
 		x = (PLAYFIELD_WIDTH-3);
 		gamebuffer[0+PLAYFIELD_WIDTH*y] = '*';
 		while(x-- > 1) {
-			gamebuffer[x+PLAYFIELD_WIDTH*y] = '.';
+			gamebuffer[x+PLAYFIELD_WIDTH*y] = '*';
 		}
 		gamebuffer[(PLAYFIELD_WIDTH-2)+PLAYFIELD_WIDTH*y] = '*';
 		gamebuffer[(PLAYFIELD_WIDTH-1)+PLAYFIELD_WIDTH*y] = '\n';
@@ -117,13 +119,147 @@ int init_module() {
 		gamebuffer[x+0*PLAYFIELD_WIDTH] = '*';
 		gamebuffer[x+(PLAYFIELD_HEIGHT-2)*PLAYFIELD_WIDTH] = '*';
 	}
+
+	box_size_x = 80 / 15;
+        box_size_y = 24 / 8;
+        box_pos_x = 1;
+        get_random_bytes(&rand, sizeof(rand));
+        box_pos_y = (rand%(PLAYFIELD_HEIGHT - 3)) + 1;
+        get_random_bytes(&rand, sizeof(rand));
+        num_doors = rand % 1 + 1;
+        num_doors_available = 0;
+
+	j = 0;
+        while(j < 5){
+                i = 0;
+                box_pos_x = 1;
+                get_random_bytes(&rand, sizeof(rand));
+                box_pos_y = (rand%(PLAYFIELD_HEIGHT - 3)) + 1;
+                --num_doors_available;
+                while(box_pos_x < PLAYFIELD_WIDTH-3) {
+                        x = 0;
+                        y = 0;
+
+                        while (x < box_size_x && (x + box_pos_x) < PLAYFIELD_WIDTH-3){
+                                //printk("AHH: %d < %d &&  %d < %d\n", x, box_size_x, box_pos_x, PLAYFIELD_WIDTH-3);
+                                while (y < box_size_y && (y + box_pos_y) < PLAYFIELD_HEIGHT-3) {
+                                        gamebuffer[(x+box_pos_x) + PLAYFIELD_WIDTH * (box_pos_y+y)] = '.';
+                                        //printk("(%d, %d)\n", (x+box_pos_x), (box_pos_y+y));
+                                        ++y;
+                                }
+                                y = 0;
+                                ++x;
+                        }
+
+                        if (i++ > 10000){num_doors_available++;}
+
+                        // update board 
+                        if ( (box_pos_x == 1 && box_pos_y == doors[1]) ||
+                                (box_pos_y == 1 && box_pos_x == doors[0]) ||
+                                (((box_pos_x + box_size_x) <= doors[0]) && box_pos_y == doors[1]) ||
+                                (((box_pos_y + box_size_y) <= doors[1]) && box_pos_x == doors[0]))
+                                { ++num_doors_available; }
+                
+                        get_random_bytes(&rand, sizeof(rand));
+                        if (rand % 2) {box_pos_x += (rand % box_size_x); }
+                        get_random_bytes(&rand, sizeof(rand));
+                        if (rand % 2 == 0){
+                                box_pos_y += (rand % (2 * box_size_y)) - box_size_y;
+                        } else {
+                                box_pos_y +=  rand % (box_size_y);
+                        }
+
+                        if (box_pos_x < 1) { box_pos_x = 1; }
+                        if (box_pos_x > PLAYFIELD_WIDTH-3) { box_pos_x = PLAYFIELD_WIDTH-3; }
+                        if (box_pos_y < 1) { box_pos_y = 1; }
+                        if (box_pos_y > PLAYFIELD_HEIGHT-3) { box_pos_y = PLAYFIELD_HEIGHT-3; }
+
+                        }
+                ++j;    
+        }
+
+	i = 0;
+	doors[0] = PLAYFIELD_WIDTH - 2;
+	do{
+		get_random_bytes(&rand, sizeof(rand));
+                doors[1] = rand % (PLAYFIELD_HEIGHT-2) + 1;
+	} while (gamebuffer[doors[0]+doors[1]*PLAYFIELD_WIDTH-2] == '*');
+	gamebuffer[doors[0]+doors[1]*PLAYFIELD_WIDTH] = '^';
+        /*while ( i++ <= num_doors ) {
+                get_random_bytes(&rand, sizeof(rand));
+                switch(rand % 4){
+                        case 0:
+				do{
+                                	doors[2*i] = 0;
+					get_random_bytes(&rand, sizeof(rand));
+                                	doors[2*i+1] = rand % (PLAYFIELD_WIDTH-3) + 1;
+				} while (gamebuffer[1+doors[1]*PLAYFIELD_WIDTH] == '*');
+				gamebuffer[1+doors[1]*PLAYFIELD_WIDTH] = '^';
+                                break;
+                        case 1:
+				do{
+                                	get_random_bytes(&rand, sizeof(rand));
+                               		doors[2*i] = rand % (PLAYFIELD_HEIGHT-3) + 1;
+                                	doors[2*i+1] = 0;
+				} while (gamebuffer[doors[0]] == '*');
+				gamebuffer[1+doors[1]*PLAYFIELD_WIDTH] = '^';
+                                break;
+                        case 2:
+				do{
+                                	doors[2*i] = 80;
+                                	get_random_bytes(&rand, sizeof(rand));
+                                	doors[2*i+1] = rand % (PLAYFIELD_WIDTH-3) + 1;
+				} while (gamebuffer[(PLAYFIELD_WIDTH - 3)+doors[1]*PLAYFIELD_WIDTH] == '*');
+				gamebuffer[1+doors[1]*PLAYFIELD_WIDTH] = '^';
+                                break;
+                        case 3:
+				do{
+                                	get_random_bytes(&rand, sizeof(rand));
+                                	doors[2*i] = rand % (PLAYFIELD_HEIGHT-3) + 1;
+                                	doors[2*i+1] = 80;
+				} while (gamebuffer[doors[0]+(PLAYFIELD_HEIGHT-1)*PLAYFIELD_WIDTH] == '*');
+				gamebuffer[1+doors[1]*PLAYFIELD_WIDTH] = '^';
+                                break;
+                        default:
+                                printk("YOU GET SUM FUK");
+                }
+        }*/
+
 	
-	enemyPos[0] = 40+PLAYFIELD_WIDTH*3;
-	enemyHealth[0] = 100;
+	get_random_bytes(&rand, sizeof(rand));
+	enemyCount = rand % 25 + 5;
+	i = 0;
+	while (i < enemyCount){
+		do{
+			get_random_bytes(&rand, sizeof(rand));
+			player_x = rand % (PLAYFIELD_WIDTH - 3) + 1;
+			get_random_bytes(&rand, sizeof(rand));
+        	        player_y = rand % (PLAYFIELD_HEIGHT-3) + 1;
+		} while (gamebuffer[player_x+player_y*PLAYFIELD_WIDTH+1] != '.');
+		enemyPos[i] = player_x+player_y*PLAYFIELD_WIDTH;
+		gamebuffer[ player_x+player_y*PLAYFIELD_WIDTH ] = 'X';
+		enemyHealth[i] = 100;
+		++i;
+	}
+	
+	
+	player_x = 1;
+	do{
+		get_random_bytes(&rand, sizeof(rand));
+                player_y = rand % (PLAYFIELD_HEIGHT-3) + 1;
+	} while (gamebuffer[player_x+player_y*PLAYFIELD_WIDTH+1] != '.');
+	playerPos = player_x+player_y*PLAYFIELD_WIDTH;
+	gamebuffer[playerPos] = '@';
+}
+
+int init_module() {
+	int status;
+	
+	genLevel();
+
 	gamebuffer[(PLAYFIELD_WIDTH-1)+0*PLAYFIELD_WIDTH] = '\n';
 	gamebuffer[(PLAYFIELD_WIDTH-1)+(PLAYFIELD_HEIGHT-2)*PLAYFIELD_WIDTH] = '\n';
 	gamebuffer[sizeof(gamebuffer)-1] = '\0';
-	gamebuffer[playerPos] = '@';
 
 	rogue_draw_stat();
 	rogue_draw_enemies();
