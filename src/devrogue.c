@@ -3,6 +3,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
+#include <linux/random.h>
 #include <asm/uaccess.h>
 
 MODULE_LICENSE("GPL");
@@ -20,6 +21,8 @@ static void rogue_draw_stat(void);
 static void rogue_draw_enemies(void);
 
 static void rogue_update_state(char);
+static void rogue_endgame(void);
+static void rogue_do_ai(void);
 static int rogue_open(struct inode *, struct file *);
 static int rogue_release(struct inode *, struct file *);
 static ssize_t rogue_read(struct file *, char *, size_t, loff_t *);
@@ -33,8 +36,12 @@ static char actionqueue[] = "blahblahblah";
 #define PLAYFIELD_HEIGHT 24
 
 // 8+2+4+16+3+4+7+2+4+30 = 80
-static char stat_fmt[] = "Health: %2d    Enemies Killed: %3d    Player Level: %2d    Floor: %2d    %10s\n";
+static const char stat_fmt[] = "Health: %2d    Enemies Killed: %3d    Player Level: %2d    Floor: %2d    %10s\n";
 static char statbar[82];
+
+static const char lose_fmt[] = "***********************************You Died.************************************\n";
+static const char win_fmt[] =  "                                 SORRY NOTHING                                  \n";
+
 
 static char gamebuffer[PLAYFIELD_WIDTH*PLAYFIELD_HEIGHT+1];
 
@@ -42,10 +49,14 @@ static int playerPos = 1+PLAYFIELD_WIDTH; // Start the player at coordinate 1,1 
 static int enemyPos[30];
 static int enemyHealth[30];
 
+
+#define STUPID_THRESHOLD 0
 #define PLAYER_HEALTH_MAX 99
 #define LEVEL_MAX 99
 #define ENEMIES_MAX 600
 #define DAMAGE_RATIO 5
+
+static unsigned char rand = 0;
 
 static int playerHealth = 20; // Cap at 99
 static int playerMaxHealth = 20;
@@ -53,6 +64,8 @@ static int enemiesKilled = 0; // Cap at 600
 static int playerLevel = 1; // Cap at 99
 static int currentFloor = 1; // Cap at 99
 static int enemyCount = 1;
+
+static int gameOver = 0;
 
 #define len_queue ((sizeof(actionqueue)/sizeof(actionqueue[0])) - 1)
 
@@ -180,9 +193,218 @@ static void rogue_fight_enemy(int pos) {
 	}
 }
 
+static char rogue_inflict_damage(int pos) {
+	char x = 0;
+	if(rogue_find_enemy(pos+PLAYFIELD_WIDTH)>=0) {
+		x = 1;
+		get_random_bytes(&rand, sizeof(rand));
+		if(rand%20>10) {
+			playerHealth -= currentFloor*2;
+		}
+	}
+	if(rogue_find_enemy(pos-PLAYFIELD_WIDTH)>=0) {
+		x = 1;
+		get_random_bytes(&rand, sizeof(rand));
+		if(rand%20>10) {
+			playerHealth -= currentFloor*2;
+		}
+	}
+	if(rogue_find_enemy(pos-1)>=0) {
+		x = 1;
+		get_random_bytes(&rand, sizeof(rand));
+		if(rand%20>10) {
+			playerHealth -= currentFloor*2;
+		}
+	}
+	if(rogue_find_enemy(pos+1)>=0) {
+		x = 1;
+		get_random_bytes(&rand, sizeof(rand));
+		if(rand%20>10) {
+			playerHealth -= currentFloor*2;
+		}
+	}
+	return x;
+}
+
+#define ABS(v) v*((v<0)*(-1)+(v>0))
+
+static void rogue_do_ai() {
+	int i = 0;
+	int canmove = 0;
+	int px = 0;
+	int py = 0;
+	int ex = 0;
+	int ey = 0;
+	for(i = 0; i<enemyCount; i++) {
+		gamebuffer[enemyPos[i]] = '.';
+		if(enemyHealth[i] > 0) {
+			get_random_bytes(&rand, sizeof(rand));
+			if(rand<STUPID_THRESHOLD) {
+				// Move randomly
+				while(canmove == 0) {
+					get_random_bytes(&rand, sizeof(rand));
+					switch(rand%4) {
+						case 0: // up
+							if(enemyPos[i] - PLAYFIELD_WIDTH >= 0) { 
+								if(gamebuffer[enemyPos[i]-PLAYFIELD_WIDTH] == '.') {
+									enemyPos[i] -= PLAYFIELD_WIDTH;
+									canmove = 1;
+								}
+							}
+							break;
+						case 1: // down
+							if((enemyPos[i] + PLAYFIELD_WIDTH)/PLAYFIELD_WIDTH < (PLAYFIELD_HEIGHT-1)) {
+								if(gamebuffer[enemyPos[i]+PLAYFIELD_WIDTH] == '.') {
+									enemyPos[i] += PLAYFIELD_WIDTH;
+									canmove = 1;
+								}
+							}
+							break;
+						case 2: // left
+							if((enemyPos[i]%PLAYFIELD_WIDTH)-1 >= 0) {
+								if(gamebuffer[enemyPos[i]-1] == '.') {
+									enemyPos[i] -= 1;
+									canmove = 1;
+								}
+							}
+							break;
+						case 3: // right
+							if((enemyPos[i]%PLAYFIELD_WIDTH)+1 < PLAYFIELD_WIDTH) {
+								if(gamebuffer[enemyPos[i]+1] == '.') {
+									enemyPos[i] += 1;
+									canmove = 1;
+								}
+							}
+							break;
+					}
+				}
+				gamebuffer[enemyPos[i]] = 'X';
+			} else {
+				// Move towards player
+				px = playerPos % PLAYFIELD_WIDTH;
+				py = playerPos/PLAYFIELD_WIDTH;
+				ex = enemyPos[i] % PLAYFIELD_WIDTH;
+				ey = enemyPos[i]/PLAYFIELD_WIDTH;
+
+				if(ABS(ex-px) > ABS(ey-py)) {
+					if(ex > (px+1)) {
+						// Try Left
+						if((enemyPos[i]%PLAYFIELD_WIDTH)-1 >= 0) {
+							if(gamebuffer[enemyPos[i]-1] == '.') {
+								enemyPos[i] -= 1;
+								canmove = 1;
+							}
+						}
+					} else if(ex < (px-1)) {
+						// Try Right
+						if((enemyPos[i]%PLAYFIELD_WIDTH)+1 < PLAYFIELD_WIDTH) {
+							if(gamebuffer[enemyPos[i]+1] == '.') {
+								enemyPos[i] += 1;
+								canmove = 1;
+							}
+						}
+					}
+					if(!canmove) {
+						if(ey > (py+1)) {
+							// Try up
+							if(enemyPos[i] - PLAYFIELD_WIDTH >= 0) { 
+								if(gamebuffer[enemyPos[i]-PLAYFIELD_WIDTH] == '.') {
+									enemyPos[i] -= PLAYFIELD_WIDTH;
+									canmove = 1;
+								}
+							}
+						} else if(ey < (py-1)) {
+							// Try down
+							if((enemyPos[i] + PLAYFIELD_WIDTH)/PLAYFIELD_WIDTH < (PLAYFIELD_HEIGHT-1)) {
+								if(gamebuffer[enemyPos[i]+PLAYFIELD_WIDTH] == '.') {
+									enemyPos[i] += PLAYFIELD_WIDTH;
+									canmove = 1;
+								}
+							}
+						}
+					}
+				} else {
+						if(ey > (py+1)) {
+							// Try up
+							if(enemyPos[i] - PLAYFIELD_WIDTH >= 0) { 
+								if(gamebuffer[enemyPos[i]-PLAYFIELD_WIDTH] == '.') {
+									enemyPos[i] -= PLAYFIELD_WIDTH;
+									canmove = 1;
+								}
+							}
+						} else if(ey < (py-1)) {
+							// Try down
+							if((enemyPos[i] + PLAYFIELD_WIDTH)/PLAYFIELD_WIDTH < (PLAYFIELD_HEIGHT-1)) {
+								if(gamebuffer[enemyPos[i]+PLAYFIELD_WIDTH] == '.') {
+									enemyPos[i] += PLAYFIELD_WIDTH;
+									canmove = 1;
+								}
+							}
+						}
+						if(!canmove) {
+							if(ex > (px+1)) {
+								// Try Left
+								if((enemyPos[i]%PLAYFIELD_WIDTH)-1 >= 0) {
+									if(gamebuffer[enemyPos[i]-1] == '.') {
+										enemyPos[i] -= 1;
+										canmove = 1;
+									}
+								}
+							} else if(ex < (px-1)) {
+								// Try Right
+								if((enemyPos[i]%PLAYFIELD_WIDTH)+1 < PLAYFIELD_WIDTH) {
+									if(gamebuffer[enemyPos[i]+1] == '.') {
+										enemyPos[i] += 1;
+										canmove = 1;
+									}
+								}
+							}
+						}
+				}
+
+				
+				gamebuffer[enemyPos[i]] = 'X';
+			}
+		}
+	}
+}
+
+static void rogue_endgame() {
+	int y = (PLAYFIELD_HEIGHT-1);
+	int x = (PLAYFIELD_WIDTH-1);
+	int i = 0;
+	switch(gameOver) {
+		case 1:
+			while(y-- > 0) {
+				x = (PLAYFIELD_WIDTH-1);
+				while(x-- > 0) {
+					gamebuffer[x+PLAYFIELD_WIDTH*y] = '*';
+				}
+				gamebuffer[(PLAYFIELD_WIDTH-1)+PLAYFIELD_WIDTH*y] = '\n';
+			}
+			for(i = 0; i<PLAYFIELD_WIDTH; i++) {
+				gamebuffer[PLAYFIELD_WIDTH*PLAYFIELD_HEIGHT/2+i] = lose_fmt[i];
+			}
+			break;
+		case 2:
+			while(y-- > 0) {
+				x = (PLAYFIELD_WIDTH-1);
+				while(x-- > 0) {
+					gamebuffer[x+PLAYFIELD_WIDTH*y] = ' ';
+				}
+				gamebuffer[(PLAYFIELD_WIDTH-1)+PLAYFIELD_WIDTH*y] = '\n';
+			}
+			for(i = 0; i<PLAYFIELD_WIDTH; i++) {
+				gamebuffer[PLAYFIELD_WIDTH*PLAYFIELD_HEIGHT/2+i] = win_fmt[i];
+			}
+			break;
+	}
+}
+
 #define ROGUE_UPDATE_LEVEL playerLevel = 1+(enemiesKilled/10)
 #define ROGUE_UPDATE_HEALTH playerMaxHealth = 20+(playerLevel-1)
 static void rogue_update_state(char action) {
+	char shouldNotHealth = 0;
 	gamebuffer[playerPos] = '.';
 	switch(action) {
 		case 'u':
@@ -222,15 +444,27 @@ static void rogue_update_state(char action) {
 			}
 			break;
 	}
+	rogue_do_ai();
+	shouldNotHealth = rogue_inflict_damage(playerPos);
+
 	ROGUE_UPDATE_LEVEL;
 	ROGUE_UPDATE_HEALTH;
 
-	if(playerHealth < playerMaxHealth)
-		playerHealth += 1;
-
+	if(playerHealth <= 0) {
+		gameOver = 1;
+	} else {
+		if(playerHealth < playerMaxHealth && !shouldNotHealth)
+			playerHealth += 1;
+		if(enemiesKilled >= 600)
+			gameOver = 2;
+	}
 	rogue_draw_stat();
 	rogue_draw_enemies();
 	gamebuffer[playerPos] = '@';
+
+	if(gameOver > 0) {
+		rogue_endgame();
+	}
 }
 
 static ssize_t rogue_read(struct file *fil, char *buf, size_t len, loff_t *off) {
@@ -248,6 +482,13 @@ static ssize_t rogue_read(struct file *fil, char *buf, size_t len, loff_t *off) 
 		while(amt-- > 0) {
 			put_user(gamebuffer[x++], buf++);
 		}
+	}
+	if(gameOver == 99) {
+		//unload_module();
+		return 0;
+	} else if(gameOver>0)
+	{
+		gameOver = 99;
 	}
 	if(shouldDisplay) {
 		shouldDisplay = 0;
