@@ -17,6 +17,8 @@ static struct cdev devcdev;
 static struct device *devdevice = NULL;
 
 static void rogue_draw_stat(void);
+static void rogue_draw_enemies(void);
+
 static void rogue_update_state(char);
 static int rogue_open(struct inode *, struct file *);
 static int rogue_release(struct inode *, struct file *);
@@ -38,15 +40,19 @@ static char gamebuffer[PLAYFIELD_WIDTH*PLAYFIELD_HEIGHT+1];
 
 static int playerPos = 1+PLAYFIELD_WIDTH; // Start the player at coordinate 1,1 where 0,0 is the top left
 static int enemyPos[30];
+static int enemyHealth[30];
 
 #define PLAYER_HEALTH_MAX 99
 #define LEVEL_MAX 99
 #define ENEMIES_MAX 600
+#define DAMAGE_RATIO 5
 
 static int playerHealth = 20; // Cap at 99
+static int playerMaxHealth = 20;
 static int enemiesKilled = 0; // Cap at 600
 static int playerLevel = 1; // Cap at 99
 static int currentFloor = 1; // Cap at 99
+static int enemyCount = 1;
 
 #define len_queue ((sizeof(actionqueue)/sizeof(actionqueue[0])) - 1)
 
@@ -63,6 +69,17 @@ static void rogue_draw_stat() {
 	sprintf(statbar, stat_fmt, playerHealth, enemiesKilled, playerLevel, currentFloor, "");
 	for(i = 0; i<PLAYFIELD_WIDTH; i++) {
 		gamebuffer[i+(PLAYFIELD_HEIGHT-1)*PLAYFIELD_WIDTH] = statbar[i];
+	}
+}
+
+static void rogue_draw_enemies() {
+	int i = enemyCount;
+	while(i-- > 0) {
+		if(enemyHealth[i] > 0) {
+			gamebuffer[enemyPos[i]] = 'X';
+		} else {
+			gamebuffer[enemyPos[i]] = '.';
+		}
 	}
 }
 
@@ -87,12 +104,16 @@ int init_module() {
 		gamebuffer[x+0*PLAYFIELD_WIDTH] = '*';
 		gamebuffer[x+(PLAYFIELD_HEIGHT-2)*PLAYFIELD_WIDTH] = '*';
 	}
+	
+	enemyPos[0] = 40+PLAYFIELD_WIDTH*3;
+	enemyHealth[0] = 100;
 	gamebuffer[(PLAYFIELD_WIDTH-1)+0*PLAYFIELD_WIDTH] = '\n';
 	gamebuffer[(PLAYFIELD_WIDTH-1)+(PLAYFIELD_HEIGHT-2)*PLAYFIELD_WIDTH] = '\n';
 	gamebuffer[sizeof(gamebuffer)-1] = '\0';
 	gamebuffer[playerPos] = '@';
 
 	rogue_draw_stat();
+	rogue_draw_enemies();
 
 	if((status = alloc_chrdev_region(&devnode, 0, 1, rogue)) < 0) {
 		printk(KERN_ALERT "Can't rogue: %d\n", status);
@@ -134,33 +155,81 @@ static int rogue_release(struct inode *ino, struct file *fil) {
 	return 0;
 }
 
+#define IS_ENEMY(e) (e>=0x41 && e<=0x5A)
+
+static int rogue_find_enemy(int pos) {
+	int i = 0;
+	for(i = 0; i<enemyCount; i++) {
+		if(pos == enemyPos[i])
+			return i;
+	}
+	return -1;
+}
+
+static void rogue_fight_enemy(int pos) {
+	int enemy = 0;
+	enemy = rogue_find_enemy(pos);
+	if(enemy >= 0) {
+		if(enemyHealth[enemy] > 0) {
+			enemyHealth[enemy] -= (playerLevel*DAMAGE_RATIO);
+			if(enemyHealth[enemy] <= 0) {
+				enemyHealth[enemy] = 0;
+				enemiesKilled++;
+			}
+		}
+	}
+}
+
+#define ROGUE_UPDATE_LEVEL playerLevel = 1+(enemiesKilled/10)
+#define ROGUE_UPDATE_HEALTH playerMaxHealth = 20+(playerLevel-1)
 static void rogue_update_state(char action) {
 	gamebuffer[playerPos] = '.';
 	switch(action) {
 		case 'u':
-			if(playerPos - PLAYFIELD_WIDTH >= 0)
-				if((gamebuffer[playerPos-PLAYFIELD_WIDTH] == '.'))
+			if(playerPos - PLAYFIELD_WIDTH >= 0) {
+				if((gamebuffer[playerPos-PLAYFIELD_WIDTH] == '.')) {
 					playerPos -= PLAYFIELD_WIDTH;
+				} else if(IS_ENEMY(gamebuffer[playerPos-PLAYFIELD_WIDTH])) {
+					rogue_fight_enemy(playerPos-PLAYFIELD_WIDTH);
+				}
+			}
 			break;
 		case 'd':
-			if((playerPos + PLAYFIELD_WIDTH)/PLAYFIELD_WIDTH < (PLAYFIELD_HEIGHT-1))
-				if(gamebuffer[playerPos+PLAYFIELD_WIDTH] == '.')
+			if((playerPos + PLAYFIELD_WIDTH)/PLAYFIELD_WIDTH < (PLAYFIELD_HEIGHT-1)) {
+				if(gamebuffer[playerPos+PLAYFIELD_WIDTH] == '.') {
 					playerPos += PLAYFIELD_WIDTH;
+				} else if(IS_ENEMY(gamebuffer[playerPos+PLAYFIELD_WIDTH])) {
+					rogue_fight_enemy(playerPos+PLAYFIELD_WIDTH);
+				}
+			}
 			break;
 		case 'l':
-			if((playerPos%PLAYFIELD_WIDTH)-1 >= 0)
-				if((gamebuffer[playerPos-1] == '.'))
+			if((playerPos%PLAYFIELD_WIDTH)-1 >= 0) {
+				if((gamebuffer[playerPos-1] == '.')) {
 					playerPos -= 1;
+				} else if(IS_ENEMY(gamebuffer[playerPos-1])) {
+					rogue_fight_enemy(playerPos-1);
+				}
+			}
 			break;
 		case 'r':
-			if((playerPos%PLAYFIELD_WIDTH)+1 < PLAYFIELD_WIDTH)
-				if((gamebuffer[playerPos+1] == '.'))
+			if((playerPos%PLAYFIELD_WIDTH)+1 < PLAYFIELD_WIDTH) {
+				if((gamebuffer[playerPos+1] == '.')) {
 					playerPos += 1;
+				} else if(IS_ENEMY(gamebuffer[playerPos+1])) {
+					rogue_fight_enemy(playerPos+1);
+				}
+			}
 			break;
 	}
-	if(playerHealth < PLAYER_HEALTH_MAX)
+	ROGUE_UPDATE_LEVEL;
+	ROGUE_UPDATE_HEALTH;
+
+	if(playerHealth < playerMaxHealth)
 		playerHealth += 1;
+
 	rogue_draw_stat();
+	rogue_draw_enemies();
 	gamebuffer[playerPos] = '@';
 }
 
