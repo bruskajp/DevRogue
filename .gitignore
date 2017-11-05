@@ -1,0 +1,7 @@
+src/.*
+src/Module.symvers
+src/devrogue.mod.*
+src/devrogue.o
+src/modules.order
+src/devrogue.ko
+*.swp

@@ -1,41 +1,100 @@
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
+#include <linux/device.h>
+#include <asm/uaccess.h>
 
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Provides the rogue character device");
 
-MODULE_LICENSE("GPL"); // Currently using the MIT license
-MODULE_AUTHOR("James Bruska and Robert Newman");
-MODULE_DESCRIPTION("Dev Rouge: A kernel space rogue-like game");
-MODULE_VERSION("0.1");
+static char rogue[] = "rogue";
+#define len_rogue ((sizeof(rogue)/sizeof(rogue[0])) - 1)
 
-static devrogue_arg_t rogue_actions;
+static dev_t devnode;
+static struct class *devclass = NULL;
+static struct cdev devcdev;
+static struct device *devdevice = NULL;
 
-long ioctl_funcs( struct file *fp, unsigned int cmd, unsigned long arg ) {
-	int ret = 0;
+static int rogue_open(struct inode *, struct file *);
+static int rogue_release(struct inode *, struct file *);
+static ssize_t rogue_read(struct file *, char *, size_t, loff_t *);
+static ssize_t rogue_write(struct file *, const char *, size_t, loff_t *);
 
-	devrogue_arg_t* rogue_actions_user = (devrogue *) arg;
+static int count = 0;
+static int cant = 0;
+static char actionqueue[] = "blahblahblah";
+#define len_queue ((sizeof(actionqueue)/sizeof(actionqueue[0])) - 1)
 
-	if (rogue_actions_user == NULL) {
-		printk_d("User did not pass in arg\n");
-		return (-EINVAL);
+static struct file_operations dev_ops = {
+	.owner = THIS_MODULE,
+	.read = rogue_read,
+	.write = rogue_write,
+	.open = rogue_open,
+	.release = rogue_release
+};
+
+int init_module() {
+	int status;
+	if((status = alloc_chrdev_region(&devnode, 0, 1, rogue)) < 0) {
+		printk(KERN_ALERT "Can't rogue: %d\n", status);
+		return status;
 	}
-
-	if (copy_from_user(&rogue_actions, rogue_actions_user, sizeof(devrogue_arg_t)) != 0)
-	{
-  		printk_d("lprof_ioctl: Could not copy cmd from userspace\n");
-  		return (-EINVAL);
+	if(IS_ERR(devclass = class_create(THIS_MODULE, rogue))) {
+		printk(KERN_ALERT "Can't rogue: %ld\n", PTR_ERR(devclass));
+		return PTR_ERR(devclass);
 	}
-
-	switch( cmd ) {
-		case IOCTL_ACTIONS:
-			printk( KERN_INFO "IT DOES A THINGS\n" );
-			break;
-		default:
-			printk( KERN_INFO "Invalid command\n" );
-		break;
+	cdev_init(&devcdev, &dev_ops);
+	if((status = cdev_add(&devcdev, devnode, 1)) < 0) {
+		printk(KERN_ALERT "Can't rogue: %d\n", status);
+		return status;
 	}
+	if(IS_ERR(devdevice = device_create(devclass, NULL, devnode, NULL, rogue))) {
+		printk(KERN_ALERT "Can't rogue: %ld\n", PTR_ERR(devdevice));
+		return PTR_ERR(devdevice);
+	}
+	printk(KERN_INFO "Ready to rogue\n");
+	return 0;
+}
 
-	struct file_operations fops = {
-		open: open,
-		read: read,
-		unlocked_ioctl: ioctl_funcs,
-		release: release
-	};
+void cleanup_module() {
+	device_destroy(devclass, devnode);
+	cdev_del(&devcdev);
+	class_destroy(devclass);
+	unregister_chrdev_region(devnode, 1);
+	printk(KERN_INFO "game over.\n");
+}
+
+static int rogue_open(struct inode *ino, struct file *fil) {
+	fil->f_pos = 0;
+	try_module_get(THIS_MODULE);
+	return 0;
+}
+
+static int rogue_release(struct inode *ino, struct file *fil) {
+	module_put(THIS_MODULE);
+	return 0;
+}
+
+
+static ssize_t rogue_read(struct file *fil, char *buf, size_t len, loff_t *off) {
+	register int amt = count;
+	register int x = 0;
+	while(amt-- > 0) {
+		put_user(actionqueue[x++], buf++);
+	}
+	cant = count;
+	count = 0;
+	return cant;
+}
+
+static ssize_t rogue_write(struct file *fil, const char *buf, size_t len, loff_t *off) {
+	/* cool. */
+	register int amt = len;
+	while(amt-- > 0) {
+		if(count < len_queue) {
+			get_user(actionqueue[count++], buf++);
+		}
+	}
+	return len;
 }
