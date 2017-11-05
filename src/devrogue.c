@@ -50,7 +50,7 @@ static int enemyPos[30];
 static int enemyHealth[30];
 
 
-#define STUPID_THRESHOLD 0
+#define STUPID_THRESHOLD 100
 #define PLAYER_HEALTH_MAX 99
 #define LEVEL_MAX 99
 #define ENEMIES_MAX 600
@@ -409,8 +409,10 @@ static void rogue_update_state(char action) {
 	switch(action) {
 		case 'u':
 			if(playerPos - PLAYFIELD_WIDTH >= 0) {
-				if((gamebuffer[playerPos-PLAYFIELD_WIDTH] == '.')) {
+				if(gamebuffer[playerPos-PLAYFIELD_WIDTH] == '.') {
 					playerPos -= PLAYFIELD_WIDTH;
+				} else if(gamebuffer[playerPos-PLAYFIELD_WIDTH] == '^') {
+					genLevel();
 				} else if(IS_ENEMY(gamebuffer[playerPos-PLAYFIELD_WIDTH])) {
 					rogue_fight_enemy(playerPos-PLAYFIELD_WIDTH);
 				}
@@ -420,6 +422,8 @@ static void rogue_update_state(char action) {
 			if((playerPos + PLAYFIELD_WIDTH)/PLAYFIELD_WIDTH < (PLAYFIELD_HEIGHT-1)) {
 				if(gamebuffer[playerPos+PLAYFIELD_WIDTH] == '.') {
 					playerPos += PLAYFIELD_WIDTH;
+				} else if(gamebuffer[playerPos+PLAYFIELD_WIDTH] == '^') {
+					genLevel();
 				} else if(IS_ENEMY(gamebuffer[playerPos+PLAYFIELD_WIDTH])) {
 					rogue_fight_enemy(playerPos+PLAYFIELD_WIDTH);
 				}
@@ -429,6 +433,8 @@ static void rogue_update_state(char action) {
 			if((playerPos%PLAYFIELD_WIDTH)-1 >= 0) {
 				if((gamebuffer[playerPos-1] == '.')) {
 					playerPos -= 1;
+				} else if(gamebuffer[playerPos-1] == '^') {
+					genLevel();
 				} else if(IS_ENEMY(gamebuffer[playerPos-1])) {
 					rogue_fight_enemy(playerPos-1);
 				}
@@ -438,6 +444,8 @@ static void rogue_update_state(char action) {
 			if((playerPos%PLAYFIELD_WIDTH)+1 < PLAYFIELD_WIDTH) {
 				if((gamebuffer[playerPos+1] == '.')) {
 					playerPos += 1;
+				} else if(gamebuffer[playerPos+1] == '^') {
+					genLevel();
 				} else if(IS_ENEMY(gamebuffer[playerPos+1])) {
 					rogue_fight_enemy(playerPos+1);
 				}
