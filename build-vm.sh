@@ -1,5 +1,5 @@
 #!/bin/sh
 
-IP=128.153.144.247
-sshpass -p "rogue" scp -r src root@$IP:/root/7hrl
-sshpass -p "rogue" ssh root@$IP "rmmod devrogue; cd 7hrl; make; insmod devrogue.ko"
+# Set ROGUE_IP to the IP of the dev VM
+sshpass -p "rogue" scp -r src root@$ROGUE_IP:/root/7hrl
+sshpass -p "rogue" ssh root@$ROGUE_IP "rmmod devrogue; cd 7hrl; make; insmod devrogue.ko"
