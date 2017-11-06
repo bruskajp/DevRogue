@@ -62,7 +62,7 @@ static int playerHealth = 20; // Cap at 99
 static int playerMaxHealth = 20;
 static int enemiesKilled = 0; // Cap at 600
 static int playerLevel = 1; // Cap at 99
-static int currentFloor = 1; // Cap at 99
+static int currentFloor = 0; // Cap at 99
 static int enemyCount = 1;
 
 static int gameOver = 0;
@@ -104,6 +104,7 @@ static void genLevel( void ) {
 	// Draw basic fullscreen room
 	int y = (PLAYFIELD_HEIGHT-2);
 	int x = (PLAYFIELD_WIDTH-2);
+	currentFloor++;
 	while(y-- > 1) {
 		x = (PLAYFIELD_WIDTH-2);
 		gamebuffer[0+PLAYFIELD_WIDTH*y] = '*';
@@ -604,7 +605,7 @@ static void rogue_update_state(char action) {
 	} else {
 		if(playerHealth < playerMaxHealth && !shouldNotHealth)
 			playerHealth += 1;
-		if(enemiesKilled >= 600)
+		if(enemiesKilled >= ENEMIES_MAX)
 			gameOver = 2;
 	}
 	rogue_draw_stat();
